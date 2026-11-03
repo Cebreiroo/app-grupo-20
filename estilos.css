@@ -1,0 +1,21 @@
+body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1b2a35; }
+h1 { margin-bottom: 0.2rem; }
+table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #d5dde3; }
+form { display: grid; gap: 0.6rem; max-width: 360px; }
+label { display: grid; gap: 0.2rem; font-size: 0.9rem; }
+input, select, button { font: inherit; padding: 0.4rem; }
+button { cursor: pointer; }
+.mensaje { min-height: 1.4rem; }
+.error { color: #b00020; }
+.ok { color: #1b7a3a; }
+[hidden] { display: none; }
+
+/* Móvil: la tabla se desliza de lado si no cabe, y los formularios usan todo el ancho */
+.tabla-scroll { overflow-x: auto; }
+@media (max-width: 600px) {
+  body { margin: 1rem auto; }
+  form { max-width: none; }
+  input, select, button { padding: 0.6rem; }
+  th, td { padding: 0.4rem 0.4rem; font-size: 0.9rem; }
+}
