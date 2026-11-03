@@ -101,6 +101,35 @@
     <p id="mensaje-asignar" class="mensaje"></p>
   </section>
 
+  <!-- PARTE 3c: alumnos e inscripciones (solo con sesión iniciada) -->
+  <section id="zona-alumnos" hidden>
+    <h2>Añadir un alumno</h2>
+    <form id="form-alumno">
+      <label>DNI <input type="text" id="alumno-dni" required></label>
+      <label>Nombre <input type="text" id="alumno-nombre" required></label>
+      <label>Edad <input type="number" id="alumno-edad" min="0" max="120" required></label>
+      <label>Teléfono <input type="tel" id="alumno-telefono"></label>
+      <label>Nivel
+        <select id="alumno-nivel" required>
+          <option value="iniciacion">Iniciación</option>
+          <option value="medio">Medio</option>
+          <option value="avanzado">Avanzado</option>
+        </select>
+      </label>
+      <button type="submit">Añadir alumno</button>
+    </form>
+    <p id="mensaje-alumno" class="mensaje"></p>
+
+    <h2>Inscribir a un alumno en una sesión</h2>
+    <p>Cada monitor asignado a la sesión admite hasta 5 alumnos.</p>
+    <form id="form-inscribir">
+      <label>Alumno <select id="inscribir-alumno" required></select></label>
+      <label>Sesión <select id="inscribir-sesion" required></select></label>
+      <button type="submit">Inscribir</button>
+    </form>
+    <p id="mensaje-inscribir" class="mensaje"></p>
+  </section>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
   <script src="app.js"></script>
 </body>

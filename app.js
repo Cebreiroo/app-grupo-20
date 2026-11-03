@@ -125,10 +125,48 @@ async function mostrarDetalle(sesion) {
   rellenarLista('detalle-monitores',
     data.imparte.map((i) => i.monitor.nombre + ' (' + i.monitor.dni_monitor + ')'),
     'Todavía no hay monitores asignados.');
-  rellenarLista('detalle-alumnos',
-    data.inscripcion.map((i) => i.alumno.nombre + ' (' + i.alumno.dni + ')'),
-    'Todavía no hay alumnos inscritos.');
+  pintarAlumnosDetalle(sesion, data.inscripcion.map((i) => i.alumno));
   document.getElementById('detalle-sesion').hidden = false;
+}
+
+// Lista de alumnos del detalle, cada uno con su botón para cancelar la inscripción
+function pintarAlumnosDetalle(sesion, alumnos) {
+  const lista = document.getElementById('detalle-alumnos');
+  lista.replaceChildren();
+  if (alumnos.length === 0) {
+    const vacio = document.createElement('li');
+    vacio.textContent = 'Todavía no hay alumnos inscritos.';
+    lista.appendChild(vacio);
+    return;
+  }
+  for (const alumno of alumnos) {
+    const elemento = document.createElement('li');
+    elemento.textContent = alumno.nombre + ' (' + alumno.dni + ') ';
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = 'Cancelar inscripción';
+    boton.addEventListener('click', () => cancelarInscripcion(sesion, alumno));
+    elemento.appendChild(boton);
+    lista.appendChild(elemento);
+  }
+}
+
+// PARTE 5d: cancelar una inscripción (borra la fila de inscripcion)
+async function cancelarInscripcion(sesion, alumno) {
+  const seguro = confirm('¿Cancelar la inscripción de ' + alumno.nombre + '? ' +
+    'Si tenía material prestado en esta sesión, ese préstamo también se borra.');
+  if (!seguro) return;
+  const { error } = await cliente
+    .from('inscripcion')
+    .delete()
+    .eq('dni_alumno', alumno.dni)
+    .eq('id_sesion', sesion.id_sesion);
+  if (error) {
+    mostrarMensaje('mensaje-lista', 'No se pudo cancelar: ' + error.message, true);
+    return;
+  }
+  await cargarSesiones();      // actualiza las plazas libres
+  await mostrarDetalle(sesion); // vuelve a pintar el detalle sin ese alumno
 }
 
 document.getElementById('btn-cerrar-detalle').addEventListener('click', () => {
@@ -159,9 +197,23 @@ function rellenarSelector(idSelect, opciones) {
 }
 
 function rellenarSelectorSesiones(sesiones) {
-  rellenarSelector('asignar-sesion', sesiones.map((s) => ({
+  const opciones = sesiones.map((s) => ({
     valor: s.id_sesion,
     texto: s.fecha + ' ' + s.hora_inicio.slice(0, 5) + ' ' + s.playa
+  }));
+  rellenarSelector('asignar-sesion', opciones);
+  rellenarSelector('inscribir-sesion', opciones);
+}
+
+async function cargarAlumnos() {
+  const { data, error } = await cliente.from('alumno').select('dni, nombre').order('nombre');
+  if (error) {
+    mostrarMensaje('mensaje-inscribir', 'No se pudieron cargar los alumnos: ' + error.message, true);
+    return;
+  }
+  rellenarSelector('inscribir-alumno', data.map((a) => ({
+    valor: a.dni,
+    texto: a.nombre + ' (' + a.dni + ')'
   })));
 }
 
@@ -200,11 +252,15 @@ function actualizarVista(sesionAuth) {
   document.getElementById('col-detalle').hidden = !hayUsuario;
   if (!hayUsuario) document.getElementById('detalle-sesion').hidden = true;
   document.getElementById('zona-monitores').hidden = !hayUsuario;
+  document.getElementById('zona-alumnos').hidden = !hayUsuario;
   document.getElementById('usuario').textContent = hayUsuario ? sesionAuth.user.email : '';
   // Al entrar o salir cambia lo que se puede ver, así que se recarga la lista
   if (habiaUsuario !== hayUsuario) {
     cargarSesiones();
-    if (hayUsuario) cargarMonitores();
+    if (hayUsuario) {
+      cargarMonitores();
+      cargarAlumnos();
+    }
   }
 }
 cliente.auth.onAuthStateChange((_evento, sesionAuth) => actualizarVista(sesionAuth));
@@ -262,6 +318,44 @@ document.getElementById('form-asignar').addEventListener('submit', async (evento
     return;
   }
   mostrarMensaje('mensaje-asignar', 'Monitor asignado.', false);
+  cargarSesiones();
+});
+
+// PARTE 10: añadir un alumno nuevo
+document.getElementById('form-alumno').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  const telefono = document.getElementById('alumno-telefono').value.trim();
+  const { error } = await cliente.from('alumno').insert({
+    dni: document.getElementById('alumno-dni').value.trim(),
+    nombre: document.getElementById('alumno-nombre').value.trim(),
+    edad: Number(document.getElementById('alumno-edad').value),
+    telefono: telefono === '' ? null : telefono,
+    nivel: document.getElementById('alumno-nivel').value
+  });
+  if (error) {
+    const texto = error.code === '23505' ? 'Ya existe un alumno con ese DNI.' : error.message;
+    mostrarMensaje('mensaje-alumno', 'No se pudo añadir: ' + texto, true);
+    return;
+  }
+  mostrarMensaje('mensaje-alumno', 'Alumno añadido.', false);
+  evento.target.reset();
+  cargarAlumnos();
+});
+
+// PARTE 11: inscribir a un alumno en una sesión (tabla inscripcion)
+document.getElementById('form-inscribir').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  const { error } = await cliente.from('inscripcion').insert({
+    dni_alumno: document.getElementById('inscribir-alumno').value,
+    id_sesion: Number(document.getElementById('inscribir-sesion').value)
+  });
+  if (error) {
+    // 23505 = ya estaba inscrito; si la sesión está completa, la base de datos lo explica en su mensaje
+    const texto = error.code === '23505' ? 'Ese alumno ya está inscrito en esa sesión.' : error.message;
+    mostrarMensaje('mensaje-inscribir', 'No se pudo inscribir: ' + texto, true);
+    return;
+  }
+  mostrarMensaje('mensaje-inscribir', 'Alumno inscrito.', false);
   cargarSesiones();
 });
 
