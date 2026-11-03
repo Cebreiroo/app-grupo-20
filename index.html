@@ -66,6 +66,28 @@
     <p id="mensaje-form" class="mensaje"></p>
   </section>
 
+  <!-- PARTE 3b: monitores (solo con sesión iniciada) -->
+  <section id="zona-monitores" hidden>
+    <h2>Añadir un monitor</h2>
+    <form id="form-monitor">
+      <label>DNI <input type="text" id="monitor-dni" required></label>
+      <label>Nombre <input type="text" id="monitor-nombre" required></label>
+      <label>Edad <input type="number" id="monitor-edad" min="16" max="120" required></label>
+      <label>Teléfono <input type="tel" id="monitor-telefono"></label>
+      <button type="submit">Añadir monitor</button>
+    </form>
+    <p id="mensaje-monitor" class="mensaje"></p>
+
+    <h2>Asignar un monitor a una sesión</h2>
+    <p>Cada sesión admite hasta 3 monitores.</p>
+    <form id="form-asignar">
+      <label>Sesión <select id="asignar-sesion" required></select></label>
+      <label>Monitor <select id="asignar-monitor" required></select></label>
+      <button type="submit">Asignar</button>
+    </form>
+    <p id="mensaje-asignar" class="mensaje"></p>
+  </section>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
   <script>
     // PARTE 4: conexión con Supabase (la publishable key es pública por diseño; la seguridad la da RLS)
@@ -109,6 +131,7 @@
         return;
       }
       mostrarMensaje('mensaje-lista', data.length === 0 ? 'Todavía no hay sesiones.' : '', false);
+      if (hayUsuario) rellenarSelectorSesiones(data);
 
       for (const sesion of data) {
         const fila = document.createElement('tr');
@@ -127,6 +150,37 @@
         }
         lista.appendChild(fila);
       }
+    }
+
+    // PARTE 5b: rellenar los desplegables de "Asignar un monitor a una sesión"
+    function rellenarSelector(idSelect, opciones) {
+      const select = document.getElementById(idSelect);
+      select.replaceChildren();
+      for (const { valor, texto } of opciones) {
+        const opcion = document.createElement('option');
+        opcion.value = valor;
+        opcion.textContent = texto;
+        select.appendChild(opcion);
+      }
+    }
+
+    function rellenarSelectorSesiones(sesiones) {
+      rellenarSelector('asignar-sesion', sesiones.map((s) => ({
+        valor: s.id_sesion,
+        texto: s.fecha + ' ' + s.hora_inicio.slice(0, 5) + ' ' + s.playa
+      })));
+    }
+
+    async function cargarMonitores() {
+      const { data, error } = await cliente.from('monitor').select('dni_monitor, nombre').order('nombre');
+      if (error) {
+        mostrarMensaje('mensaje-asignar', 'No se pudieron cargar los monitores: ' + error.message, true);
+        return;
+      }
+      rellenarSelector('asignar-monitor', data.map((m) => ({
+        valor: m.dni_monitor,
+        texto: m.nombre + ' (' + m.dni_monitor + ')'
+      })));
     }
 
     // PARTE 6: iniciar y cerrar sesión
@@ -149,9 +203,13 @@
       document.getElementById('zona-login').hidden = hayUsuario;
       document.getElementById('zona-formulario').hidden = !hayUsuario;
       document.getElementById('col-plazas').hidden = !hayUsuario;
+      document.getElementById('zona-monitores').hidden = !hayUsuario;
       document.getElementById('usuario').textContent = hayUsuario ? sesionAuth.user.email : '';
       // Al entrar o salir cambia lo que se puede ver, así que se recarga la lista
-      if (habiaUsuario !== hayUsuario) cargarSesiones();
+      if (habiaUsuario !== hayUsuario) {
+        cargarSesiones();
+        if (hayUsuario) cargarMonitores();
+      }
     }
     cliente.auth.onAuthStateChange((_evento, sesionAuth) => actualizarVista(sesionAuth));
 
@@ -171,6 +229,43 @@
       }
       mostrarMensaje('mensaje-form', 'Sesión añadida.', false);
       evento.target.reset();
+      cargarSesiones();
+    });
+
+    // PARTE 8: añadir un monitor nuevo
+    document.getElementById('form-monitor').addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      const telefono = document.getElementById('monitor-telefono').value.trim();
+      const { error } = await cliente.from('monitor').insert({
+        dni_monitor: document.getElementById('monitor-dni').value.trim(),
+        nombre: document.getElementById('monitor-nombre').value.trim(),
+        edad: Number(document.getElementById('monitor-edad').value),
+        telefono: telefono === '' ? null : telefono
+      });
+      if (error) {
+        const texto = error.code === '23505' ? 'Ya existe un monitor con ese DNI.' : error.message;
+        mostrarMensaje('mensaje-monitor', 'No se pudo añadir: ' + texto, true);
+        return;
+      }
+      mostrarMensaje('mensaje-monitor', 'Monitor añadido.', false);
+      evento.target.reset();
+      cargarMonitores();
+    });
+
+    // PARTE 9: asignar un monitor a una sesión (tabla imparte)
+    document.getElementById('form-asignar').addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      const { error } = await cliente.from('imparte').insert({
+        id_sesion: Number(document.getElementById('asignar-sesion').value),
+        dni_monitor: document.getElementById('asignar-monitor').value
+      });
+      if (error) {
+        // 23505 = ese monitor ya estaba en esa sesión; el límite de 3 monitores lo avisa la base de datos
+        const texto = error.code === '23505' ? 'Ese monitor ya está asignado a esa sesión.' : error.message;
+        mostrarMensaje('mensaje-asignar', 'No se pudo asignar: ' + texto, true);
+        return;
+      }
+      mostrarMensaje('mensaje-asignar', 'Monitor asignado.', false);
       cargarSesiones();
     });
 
