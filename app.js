@@ -161,7 +161,7 @@ function pintarAlumnosDetalle(sesion, inscritos) {
         const devolver = document.createElement('button');
         devolver.type = 'button';
         devolver.textContent = 'Devolver';
-        devolver.addEventListener('click', () => devolverMaterial(sesion, prestamo.id_material));
+        devolver.addEventListener('click', () => devolverMaterial(sesion, alumno.dni, prestamo.id_material));
         fila.appendChild(devolver);
         material.appendChild(fila);
       }
@@ -171,11 +171,12 @@ function pintarAlumnosDetalle(sesion, inscritos) {
   }
 }
 
-// Devolver material = borrar la fila del préstamo (así la pieza queda libre para esa sesión)
-async function devolverMaterial(sesion, idMaterial) {
+// Devolver material = borrar la fila del préstamo (así la unidad vuelve al stock de esa sesión)
+async function devolverMaterial(sesion, dniAlumno, idMaterial) {
   const { error } = await cliente
     .from('prestamo_material')
     .delete()
+    .eq('dni_alumno', dniAlumno)
     .eq('id_material', idMaterial)
     .eq('id_sesion', sesion.id_sesion);
   if (error) {
@@ -243,24 +244,26 @@ function rellenarSelectorSesiones(sesiones) {
 }
 
 // PARTE 5e: inventario de material y préstamos
-let inventario = [];
-
+// "unica" es la medida de lo que no tiene tallas; no hace falta enseñarla
 function textoPieza(pieza) {
-  return pieza.tipo_material + (pieza.medida ? ' (' + pieza.medida + ')' : '');
+  return pieza.tipo_material + (pieza.medida && pieza.medida !== 'unica' ? ' ' + pieza.medida : '');
 }
 
 async function cargarInventario() {
-  const { data, error } = await cliente.from('material_escuela').select('*').order('tipo_material');
+  const { data, error } = await cliente.from('material_escuela').select('*').order('tipo_material').order('medida');
   if (error) {
-    mostrarMensaje('mensaje-material', 'No se pudo cargar el inventario: ' + error.message, true);
+    mostrarMensaje('mensaje-material', 'No se pudo cargar el stock: ' + error.message, true);
     return;
   }
-  inventario = data;
-  rellenarLista('lista-material', data.map(textoPieza), 'Todavía no hay material en el inventario.');
+  rellenarLista('lista-material',
+    data.map((p) => textoPieza(p) + ': ' + p.stock + ' unidades en total'),
+    'Todavía no hay material en el stock.');
   actualizarOpcionesPrestamo();
 }
 
-// Al elegir una sesión: solo salen sus alumnos inscritos y las piezas que aún no están prestadas en ella
+// Al elegir una sesión: salen sus alumnos inscritos y el material con unidades libres.
+// La función material_disponible de Supabase calcula las unidades libres teniendo en cuenta
+// las sesiones que coinciden en el tiempo (el stock se comparte entre ellas).
 async function actualizarOpcionesPrestamo() {
   const idSesion = Number(document.getElementById('prestar-sesion').value);
   if (!idSesion) {
@@ -268,23 +271,24 @@ async function actualizarOpcionesPrestamo() {
     rellenarSelector('prestar-material', []);
     return;
   }
-  const [inscritos, prestamos] = await Promise.all([
+  const [inscritos, material] = await Promise.all([
     cliente.from('inscripcion').select('alumno(nombre, dni)').eq('id_sesion', idSesion),
-    cliente.from('prestamo_material').select('id_material').eq('id_sesion', idSesion)
+    cliente.rpc('material_disponible', { p_id_sesion: idSesion })
   ]);
-  if (inscritos.error || prestamos.error) {
-    mostrarMensaje('mensaje-prestar', 'No se pudieron cargar las opciones: ' + (inscritos.error || prestamos.error).message, true);
+  if (inscritos.error || material.error) {
+    mostrarMensaje('mensaje-prestar', 'No se pudieron cargar las opciones: ' + (inscritos.error || material.error).message, true);
     return;
   }
-  const prestadas = new Set(prestamos.data.map((p) => p.id_material));
+  const conStock = material.data.filter((m) => m.disponible > 0);
   rellenarSelector('prestar-alumno', inscritos.data.map((i) => ({
     valor: i.alumno.dni,
     texto: i.alumno.nombre + ' (' + i.alumno.dni + ')'
   })));
-  rellenarSelector('prestar-material', inventario.filter((p) => !prestadas.has(p.id_material)).map((p) => ({
-    valor: p.id_material,
-    texto: textoPieza(p)
+  rellenarSelector('prestar-material', conStock.map((m) => ({
+    valor: m.id_material,
+    texto: textoPieza(m) + ' (quedan ' + m.disponible + ')'
   })));
+  mostrarMensaje('mensaje-prestar', conStock.length === 0 ? 'No queda material libre en esa sesión.' : '', false);
 }
 document.getElementById('prestar-sesion').addEventListener('change', actualizarOpcionesPrestamo);
 
@@ -444,19 +448,20 @@ document.getElementById('form-inscribir').addEventListener('submit', async (even
   cargarSesiones();
 });
 
-// PARTE 12: añadir una pieza al inventario de material
+// PARTE 12: añadir un tipo y medida de material al stock
 document.getElementById('form-material').addEventListener('submit', async (evento) => {
   evento.preventDefault();
-  const medida = document.getElementById('material-medida').value.trim();
   const { error } = await cliente.from('material_escuela').insert({
     tipo_material: document.getElementById('material-tipo').value.trim(),
-    medida: medida === '' ? null : medida
+    medida: document.getElementById('material-medida').value.trim(),
+    stock: Number(document.getElementById('material-stock').value)
   });
   if (error) {
-    mostrarMensaje('mensaje-material', 'No se pudo añadir: ' + error.message, true);
+    const texto = error.code === '23505' ? 'Ya existe ese tipo de material con esa medida.' : error.message;
+    mostrarMensaje('mensaje-material', 'No se pudo añadir: ' + texto, true);
     return;
   }
-  mostrarMensaje('mensaje-material', 'Pieza añadida al inventario.', false);
+  mostrarMensaje('mensaje-material', 'Material añadido al stock.', false);
   evento.target.reset();
   cargarInventario();
 });
@@ -470,8 +475,9 @@ document.getElementById('form-prestar').addEventListener('submit', async (evento
     id_sesion: Number(document.getElementById('prestar-sesion').value)
   });
   if (error) {
-    // 23505 = esa pieza ya está prestada en esa sesión; 23503 = ese alumno no está inscrito en ella
-    const texto = error.code === '23505' ? 'Esa pieza ya está prestada en esa sesión.'
+    // 23505 = ese alumno ya tiene ese material; 23503 = no está inscrito en la sesión.
+    // Si no queda stock, o ya tiene un material de ese tipo, el mensaje lo da la base de datos.
+    const texto = error.code === '23505' ? 'Ese alumno ya tiene ese material en esa sesión.'
       : error.code === '23503' ? 'Ese alumno no está inscrito en esa sesión.'
       : error.message;
     mostrarMensaje('mensaje-prestar', 'No se pudo prestar: ' + texto, true);

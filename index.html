@@ -132,21 +132,22 @@
 
   <!-- PARTE 3d: material de la escuela (solo con sesión iniciada) -->
   <section id="zona-material" hidden>
-    <h2>Inventario de material</h2>
+    <h2>Stock de material</h2>
     <ul id="lista-material"></ul>
     <form id="form-material">
-      <label>Tipo de material <input type="text" id="material-tipo" placeholder="Tabla, neopreno..." required></label>
-      <label>Medida <input type="text" id="material-medida" placeholder="7'0&quot;, M, L..."></label>
-      <button type="submit">Añadir al inventario</button>
+      <label>Tipo de material <input type="text" id="material-tipo" placeholder="Tabla, Neopreno..." required></label>
+      <label>Medida <input type="text" id="material-medida" placeholder="S, M, 7'0..." required></label>
+      <label>Unidades en stock <input type="number" id="material-stock" min="0" required></label>
+      <button type="submit">Añadir al stock</button>
     </form>
     <p id="mensaje-material" class="mensaje"></p>
 
     <h2>Prestar material en una sesión</h2>
-    <p>Solo se puede prestar a alumnos inscritos en esa sesión. Para devolverlo, usa el botón <strong>Devolver</strong> en el detalle de la sesión.</p>
+    <p>Solo se puede prestar a alumnos inscritos, como máximo una tabla y un neopreno por alumno. El stock se comparte con las sesiones que coinciden en el tiempo (una sesión ocupa el material hasta 30 minutos después de acabar). Para devolverlo, usa el botón <strong>Devolver</strong> en el detalle de la sesión.</p>
     <form id="form-prestar">
       <label>Sesión <select id="prestar-sesion" required></select></label>
       <label>Alumno inscrito <select id="prestar-alumno" required></select></label>
-      <label>Pieza disponible <select id="prestar-material" required></select></label>
+      <label>Material (unidades libres en esa sesión) <select id="prestar-material" required></select></label>
       <button type="submit">Prestar</button>
     </form>
     <p id="mensaje-prestar" class="mensaje"></p>
