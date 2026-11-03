@@ -11,6 +11,8 @@ button { cursor: pointer; }
 .ok { color: #1b7a3a; }
 [hidden] { display: none; }
 
+.filtros { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; }
+
 /* Móvil: la tabla se desliza de lado si no cabe, y los formularios usan todo el ancho */
 .tabla-scroll { overflow-x: auto; }
 @media (max-width: 600px) {

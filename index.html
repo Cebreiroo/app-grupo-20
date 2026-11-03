@@ -12,15 +12,39 @@
 
   <!-- PARTE 1: lista de sesiones (la puede ver cualquiera) -->
   <h2>Sesiones</h2>
+  <div class="filtros">
+    <label>Nivel
+      <select id="filtro-nivel">
+        <option value="">Todos</option>
+        <option value="iniciacion">Iniciación</option>
+        <option value="medio">Medio</option>
+        <option value="avanzado">Avanzado</option>
+      </select>
+    </label>
+    <label>Playa <input type="text" id="filtro-playa" placeholder="Parte del nombre"></label>
+    <label>Fecha <input type="date" id="filtro-fecha"></label>
+    <button type="button" id="btn-limpiar-filtros">Quitar filtros</button>
+  </div>
   <div class="tabla-scroll">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Hora</th><th>Playa</th><th>Nivel</th><th>Duración</th><th id="col-plazas" hidden>Plazas libres</th></tr>
+        <tr><th>Fecha</th><th>Hora</th><th>Playa</th><th>Nivel</th><th>Duración</th><th id="col-plazas" hidden>Plazas libres</th><th id="col-detalle" hidden>Detalle</th></tr>
       </thead>
       <tbody id="lista"></tbody>
     </table>
   </div>
   <p id="mensaje-lista" class="mensaje"></p>
+
+  <!-- PARTE 1b: detalle de una sesión (solo con sesión iniciada) -->
+  <section id="detalle-sesion" hidden>
+    <h2>Detalle de la sesión</h2>
+    <p id="detalle-resumen"></p>
+    <h3>Monitores</h3>
+    <ul id="detalle-monitores"></ul>
+    <h3>Alumnos inscritos</h3>
+    <ul id="detalle-alumnos"></ul>
+    <button type="button" id="btn-cerrar-detalle">Cerrar detalle</button>
+  </section>
 
   <!-- PARTE 2: inicio de sesión (hace falta para añadir) -->
   <section id="zona-login">

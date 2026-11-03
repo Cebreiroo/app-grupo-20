@@ -31,17 +31,45 @@ async function cargarSesiones() {
     .order('fecha')
     .order('hora_inicio');
 
-  const lista = document.getElementById('lista');
-  lista.replaceChildren();
-
   if (error) {
+    document.getElementById('lista').replaceChildren();
     mostrarMensaje('mensaje-lista', 'No se pudieron cargar las sesiones: ' + error.message, true);
     return;
   }
-  mostrarMensaje('mensaje-lista', data.length === 0 ? 'Todavía no hay sesiones.' : '', false);
+  sesionesCargadas = data;
   if (hayUsuario) rellenarSelectorSesiones(data);
+  pintarSesiones();
+}
 
-  for (const sesion of data) {
+// Guarda las sesiones recibidas para poder filtrarlas sin volver a pedirlas a Supabase
+let sesionesCargadas = [];
+
+// Devuelve solo las sesiones que cumplen los filtros que haya rellenados
+function sesionesFiltradas() {
+  const nivel = document.getElementById('filtro-nivel').value;
+  const playa = document.getElementById('filtro-playa').value.trim().toLowerCase();
+  const fecha = document.getElementById('filtro-fecha').value;
+  return sesionesCargadas.filter((s) =>
+    (nivel === '' || s.nivel === nivel) &&
+    (playa === '' || s.playa.toLowerCase().includes(playa)) &&
+    (fecha === '' || s.fecha === fecha)
+  );
+}
+
+function pintarSesiones() {
+  const lista = document.getElementById('lista');
+  lista.replaceChildren();
+  const sesiones = sesionesFiltradas();
+
+  if (sesionesCargadas.length === 0) {
+    mostrarMensaje('mensaje-lista', 'Todavía no hay sesiones.', false);
+  } else if (sesiones.length === 0) {
+    mostrarMensaje('mensaje-lista', 'Ninguna sesión cumple los filtros.', false);
+  } else {
+    mostrarMensaje('mensaje-lista', '', false);
+  }
+
+  for (const sesion of sesiones) {
     const fila = document.createElement('tr');
     const celdas = [
       sesion.fecha,
@@ -56,9 +84,67 @@ async function cargarSesiones() {
       celda.textContent = texto; // textContent evita que se cuele HTML en la página
       fila.appendChild(celda);
     }
+    if (hayUsuario) {
+      const celdaDetalle = document.createElement('td');
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = 'Ver';
+      boton.addEventListener('click', () => mostrarDetalle(sesion));
+      celdaDetalle.appendChild(boton);
+      fila.appendChild(celdaDetalle);
+    }
     lista.appendChild(fila);
   }
 }
+
+// PARTE 5c: detalle de una sesión con sus monitores y alumnos
+function rellenarLista(idLista, textos, textoVacio) {
+  const lista = document.getElementById(idLista);
+  lista.replaceChildren();
+  for (const texto of (textos.length > 0 ? textos : [textoVacio])) {
+    const elemento = document.createElement('li');
+    elemento.textContent = texto;
+    lista.appendChild(elemento);
+  }
+}
+
+async function mostrarDetalle(sesion) {
+  // imparte(monitor(...)) significa: de cada fila de imparte, trae también los datos de su monitor
+  const { data, error } = await cliente
+    .from('sesion')
+    .select('id_sesion, imparte(monitor(nombre, dni_monitor)), inscripcion(alumno(nombre, dni))')
+    .eq('id_sesion', sesion.id_sesion)
+    .single();
+  if (error) {
+    mostrarMensaje('mensaje-lista', 'No se pudo cargar el detalle: ' + error.message, true);
+    return;
+  }
+  document.getElementById('detalle-resumen').textContent =
+    sesion.fecha + ' ' + sesion.hora_inicio.slice(0, 5) + ' en ' + sesion.playa +
+    ' (nivel ' + (sesion.nivel ?? '-') + ', ' + sesion.duracion + ' min)';
+  rellenarLista('detalle-monitores',
+    data.imparte.map((i) => i.monitor.nombre + ' (' + i.monitor.dni_monitor + ')'),
+    'Todavía no hay monitores asignados.');
+  rellenarLista('detalle-alumnos',
+    data.inscripcion.map((i) => i.alumno.nombre + ' (' + i.alumno.dni + ')'),
+    'Todavía no hay alumnos inscritos.');
+  document.getElementById('detalle-sesion').hidden = false;
+}
+
+document.getElementById('btn-cerrar-detalle').addEventListener('click', () => {
+  document.getElementById('detalle-sesion').hidden = true;
+});
+
+// Cada vez que cambia un filtro se vuelve a pintar la tabla
+for (const id of ['filtro-nivel', 'filtro-playa', 'filtro-fecha']) {
+  document.getElementById(id).addEventListener('input', pintarSesiones);
+}
+document.getElementById('btn-limpiar-filtros').addEventListener('click', () => {
+  document.getElementById('filtro-nivel').value = '';
+  document.getElementById('filtro-playa').value = '';
+  document.getElementById('filtro-fecha').value = '';
+  pintarSesiones();
+});
 
 // PARTE 5b: rellenar los desplegables de "Asignar un monitor a una sesión"
 function rellenarSelector(idSelect, opciones) {
@@ -111,6 +197,8 @@ function actualizarVista(sesionAuth) {
   document.getElementById('zona-login').hidden = hayUsuario;
   document.getElementById('zona-formulario').hidden = !hayUsuario;
   document.getElementById('col-plazas').hidden = !hayUsuario;
+  document.getElementById('col-detalle').hidden = !hayUsuario;
+  if (!hayUsuario) document.getElementById('detalle-sesion').hidden = true;
   document.getElementById('zona-monitores').hidden = !hayUsuario;
   document.getElementById('usuario').textContent = hayUsuario ? sesionAuth.user.email : '';
   // Al entrar o salir cambia lo que se puede ver, así que se recarga la lista
