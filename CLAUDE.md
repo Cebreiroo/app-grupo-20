@@ -32,10 +32,16 @@ El modelo entidad-relación original está en `docs/modelo-er.png`. Nombres en e
 | `sesion` | `id_sesion` | Fecha, hora de inicio, playa, nivel y duración |
 | `inscripcion` | (`dni_alumno`, `id_sesion`) | Resuelve la N:M alumno–sesión |
 | `imparte` | (`id_sesion`, `dni_monitor`) | Resuelve la N:M monitor–sesión |
-| `material_escuela` | `id_material` | Inventario de la escuela (tipo y medida de cada pieza) |
-| `prestamo_material` | (`id_material`, `id_sesion`) | Material que un alumno usa en una sesión; cuelga de `inscripcion` |
+| `material_escuela` | `id_material` | Catálogo de material con su stock total: una fila por tipo y medida (`tipo_material`, `medida`, `stock`; único por tipo y medida) |
+| `prestamo_material` | (`dni_alumno`, `id_sesion`, `id_material`) | Unidad de material que un alumno usa en una sesión; cuelga de `inscripcion` |
 
 Reglas de negocio: niveles `iniciacion`, `medio` o `avanzado`; máximo 3 monitores por sesión y 5 alumnos por monitor.
+
+Stock de material (migración `004_stock_material.sql`): 60 tablas (15 de cada medida: 6'0, 6'6, 7'0 y 8'0) y 70 neoprenos (S 15, M 25, L 20, XL 10).
+- El stock disponible no se guarda: se calcula como stock total − unidades prestadas en las sesiones que coinciden en el tiempo. Cada sesión ocupa el material desde su inicio hasta 30 minutos después de acabar. Así, sesiones simultáneas (en cualquier playa) comparten stock y, entre sesiones que no coinciden, el stock está completo.
+- Cada alumno puede coger como máximo 1 tabla y 1 neopreno por sesión. Lo comprueba un trigger de la base de datos, que también rechaza el préstamo si no queda stock.
+- Funciones de la base de datos: `stock_disponible(id_material, id_sesion)` y `material_disponible(id_sesion)`.
+- Un préstamo no se edita: se devuelve (se borra la fila) y se vuelve a prestar.
 Las sesiones se ofrecen en franjas horarias fijas a la semana y los alumnos se apuntan a la que les encaje.
 
 ## Reglas de trabajo
