@@ -15,6 +15,12 @@ Aplicación para organizar sesiones de surf: el material necesario, los horarios
 - Publicada en Cloudflare Pages.
 - Migraciones SQL en `supabase/migraciones/`.
 
+### Conexión a Supabase (datos públicos)
+- Project URL: `https://ecmkodlfmxmwlncxxoik.supabase.co`
+- Publishable key: `sb_publishable_ksICiDz4rmTde3bdbNZMeA_EvEI_Xz7`
+
+La publishable key está pensada para ir en el navegador; lo que protege los datos son las políticas RLS. La secret key no se anota aquí ni en ningún otro sitio del repo.
+
 ## Modelo de datos (resumen)
 El modelo entidad-relación original está en `docs/modelo-er.png`. Nombres en español, minúsculas y sin tildes.
 
