@@ -12,7 +12,8 @@ Aplicación para organizar sesiones de surf: el material necesario, los horarios
 - Página estática: HTML + CSS + JavaScript, **sin compilación** (sin npm, sin bundlers).
 - `supabase-js` cargado desde CDN.
 - Base de datos y API: Supabase (proyecto `app-grupo-20`).
-- Publicada en Cloudflare Pages.
+- Publicada en GitHub Pages desde la rama `main`: https://cebreiroo.github.io/app-grupo-20/ (Cloudflare Pages se descartó para tener una sola publicación).
+- Ficheros de la web: `index.html` (estructura), `estilos.css` (aspecto) y `app.js` (código).
 - Migraciones SQL en `supabase/migraciones/`.
 
 ### Conexión a Supabase (datos públicos)
