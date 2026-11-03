@@ -112,7 +112,8 @@ async function mostrarDetalle(sesion) {
   // imparte(monitor(...)) significa: de cada fila de imparte, trae también los datos de su monitor
   const { data, error } = await cliente
     .from('sesion')
-    .select('id_sesion, imparte(monitor(nombre, dni_monitor)), inscripcion(alumno(nombre, dni))')
+    .select('id_sesion, imparte(monitor(nombre, dni_monitor)), ' +
+      'inscripcion(alumno(nombre, dni), prestamo_material(id_material, material_escuela(tipo_material, medida)))')
     .eq('id_sesion', sesion.id_sesion)
     .single();
   if (error) {
@@ -125,21 +126,24 @@ async function mostrarDetalle(sesion) {
   rellenarLista('detalle-monitores',
     data.imparte.map((i) => i.monitor.nombre + ' (' + i.monitor.dni_monitor + ')'),
     'Todavía no hay monitores asignados.');
-  pintarAlumnosDetalle(sesion, data.inscripcion.map((i) => i.alumno));
+  pintarAlumnosDetalle(sesion, data.inscripcion);
   document.getElementById('detalle-sesion').hidden = false;
 }
 
-// Lista de alumnos del detalle, cada uno con su botón para cancelar la inscripción
-function pintarAlumnosDetalle(sesion, alumnos) {
+// Lista de alumnos del detalle: cada uno con su material prestado (y botón Devolver)
+// y con su botón para cancelar la inscripción. "inscritos" son filas de inscripcion
+// con el alumno y sus préstamos de material dentro.
+function pintarAlumnosDetalle(sesion, inscritos) {
   const lista = document.getElementById('detalle-alumnos');
   lista.replaceChildren();
-  if (alumnos.length === 0) {
+  if (inscritos.length === 0) {
     const vacio = document.createElement('li');
     vacio.textContent = 'Todavía no hay alumnos inscritos.';
     lista.appendChild(vacio);
     return;
   }
-  for (const alumno of alumnos) {
+  for (const inscripcion of inscritos) {
+    const alumno = inscripcion.alumno;
     const elemento = document.createElement('li');
     elemento.textContent = alumno.nombre + ' (' + alumno.dni + ') ';
     const boton = document.createElement('button');
@@ -147,8 +151,39 @@ function pintarAlumnosDetalle(sesion, alumnos) {
     boton.textContent = 'Cancelar inscripción';
     boton.addEventListener('click', () => cancelarInscripcion(sesion, alumno));
     elemento.appendChild(boton);
+
+    const prestamos = inscripcion.prestamo_material ?? [];
+    if (prestamos.length > 0) {
+      const material = document.createElement('ul');
+      for (const prestamo of prestamos) {
+        const fila = document.createElement('li');
+        fila.textContent = 'Material: ' + textoPieza(prestamo.material_escuela) + ' ';
+        const devolver = document.createElement('button');
+        devolver.type = 'button';
+        devolver.textContent = 'Devolver';
+        devolver.addEventListener('click', () => devolverMaterial(sesion, prestamo.id_material));
+        fila.appendChild(devolver);
+        material.appendChild(fila);
+      }
+      elemento.appendChild(material);
+    }
     lista.appendChild(elemento);
   }
+}
+
+// Devolver material = borrar la fila del préstamo (así la pieza queda libre para esa sesión)
+async function devolverMaterial(sesion, idMaterial) {
+  const { error } = await cliente
+    .from('prestamo_material')
+    .delete()
+    .eq('id_material', idMaterial)
+    .eq('id_sesion', sesion.id_sesion);
+  if (error) {
+    mostrarMensaje('mensaje-lista', 'No se pudo devolver el material: ' + error.message, true);
+    return;
+  }
+  await mostrarDetalle(sesion);
+  actualizarOpcionesPrestamo();
 }
 
 // PARTE 5d: cancelar una inscripción (borra la fila de inscripcion)
@@ -203,7 +238,55 @@ function rellenarSelectorSesiones(sesiones) {
   }));
   rellenarSelector('asignar-sesion', opciones);
   rellenarSelector('inscribir-sesion', opciones);
+  rellenarSelector('prestar-sesion', opciones);
+  actualizarOpcionesPrestamo();
 }
+
+// PARTE 5e: inventario de material y préstamos
+let inventario = [];
+
+function textoPieza(pieza) {
+  return pieza.tipo_material + (pieza.medida ? ' (' + pieza.medida + ')' : '');
+}
+
+async function cargarInventario() {
+  const { data, error } = await cliente.from('material_escuela').select('*').order('tipo_material');
+  if (error) {
+    mostrarMensaje('mensaje-material', 'No se pudo cargar el inventario: ' + error.message, true);
+    return;
+  }
+  inventario = data;
+  rellenarLista('lista-material', data.map(textoPieza), 'Todavía no hay material en el inventario.');
+  actualizarOpcionesPrestamo();
+}
+
+// Al elegir una sesión: solo salen sus alumnos inscritos y las piezas que aún no están prestadas en ella
+async function actualizarOpcionesPrestamo() {
+  const idSesion = Number(document.getElementById('prestar-sesion').value);
+  if (!idSesion) {
+    rellenarSelector('prestar-alumno', []);
+    rellenarSelector('prestar-material', []);
+    return;
+  }
+  const [inscritos, prestamos] = await Promise.all([
+    cliente.from('inscripcion').select('alumno(nombre, dni)').eq('id_sesion', idSesion),
+    cliente.from('prestamo_material').select('id_material').eq('id_sesion', idSesion)
+  ]);
+  if (inscritos.error || prestamos.error) {
+    mostrarMensaje('mensaje-prestar', 'No se pudieron cargar las opciones: ' + (inscritos.error || prestamos.error).message, true);
+    return;
+  }
+  const prestadas = new Set(prestamos.data.map((p) => p.id_material));
+  rellenarSelector('prestar-alumno', inscritos.data.map((i) => ({
+    valor: i.alumno.dni,
+    texto: i.alumno.nombre + ' (' + i.alumno.dni + ')'
+  })));
+  rellenarSelector('prestar-material', inventario.filter((p) => !prestadas.has(p.id_material)).map((p) => ({
+    valor: p.id_material,
+    texto: textoPieza(p)
+  })));
+}
+document.getElementById('prestar-sesion').addEventListener('change', actualizarOpcionesPrestamo);
 
 async function cargarAlumnos() {
   const { data, error } = await cliente.from('alumno').select('dni, nombre').order('nombre');
@@ -253,6 +336,7 @@ function actualizarVista(sesionAuth) {
   if (!hayUsuario) document.getElementById('detalle-sesion').hidden = true;
   document.getElementById('zona-monitores').hidden = !hayUsuario;
   document.getElementById('zona-alumnos').hidden = !hayUsuario;
+  document.getElementById('zona-material').hidden = !hayUsuario;
   document.getElementById('usuario').textContent = hayUsuario ? sesionAuth.user.email : '';
   // Al entrar o salir cambia lo que se puede ver, así que se recarga la lista
   if (habiaUsuario !== hayUsuario) {
@@ -260,6 +344,7 @@ function actualizarVista(sesionAuth) {
     if (hayUsuario) {
       cargarMonitores();
       cargarAlumnos();
+      cargarInventario();
     }
   }
 }
@@ -357,6 +442,43 @@ document.getElementById('form-inscribir').addEventListener('submit', async (even
   }
   mostrarMensaje('mensaje-inscribir', 'Alumno inscrito.', false);
   cargarSesiones();
+});
+
+// PARTE 12: añadir una pieza al inventario de material
+document.getElementById('form-material').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  const medida = document.getElementById('material-medida').value.trim();
+  const { error } = await cliente.from('material_escuela').insert({
+    tipo_material: document.getElementById('material-tipo').value.trim(),
+    medida: medida === '' ? null : medida
+  });
+  if (error) {
+    mostrarMensaje('mensaje-material', 'No se pudo añadir: ' + error.message, true);
+    return;
+  }
+  mostrarMensaje('mensaje-material', 'Pieza añadida al inventario.', false);
+  evento.target.reset();
+  cargarInventario();
+});
+
+// PARTE 13: prestar una pieza a un alumno inscrito en una sesión (tabla prestamo_material)
+document.getElementById('form-prestar').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  const { error } = await cliente.from('prestamo_material').insert({
+    id_material: Number(document.getElementById('prestar-material').value),
+    dni_alumno: document.getElementById('prestar-alumno').value,
+    id_sesion: Number(document.getElementById('prestar-sesion').value)
+  });
+  if (error) {
+    // 23505 = esa pieza ya está prestada en esa sesión; 23503 = ese alumno no está inscrito en ella
+    const texto = error.code === '23505' ? 'Esa pieza ya está prestada en esa sesión.'
+      : error.code === '23503' ? 'Ese alumno no está inscrito en esa sesión.'
+      : error.message;
+    mostrarMensaje('mensaje-prestar', 'No se pudo prestar: ' + texto, true);
+    return;
+  }
+  mostrarMensaje('mensaje-prestar', 'Material prestado.', false);
+  actualizarOpcionesPrestamo();
 });
 
 cargarSesiones();

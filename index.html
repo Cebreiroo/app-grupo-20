@@ -130,6 +130,28 @@
     <p id="mensaje-inscribir" class="mensaje"></p>
   </section>
 
+  <!-- PARTE 3d: material de la escuela (solo con sesión iniciada) -->
+  <section id="zona-material" hidden>
+    <h2>Inventario de material</h2>
+    <ul id="lista-material"></ul>
+    <form id="form-material">
+      <label>Tipo de material <input type="text" id="material-tipo" placeholder="Tabla, neopreno..." required></label>
+      <label>Medida <input type="text" id="material-medida" placeholder="7'0&quot;, M, L..."></label>
+      <button type="submit">Añadir al inventario</button>
+    </form>
+    <p id="mensaje-material" class="mensaje"></p>
+
+    <h2>Prestar material en una sesión</h2>
+    <p>Solo se puede prestar a alumnos inscritos en esa sesión. Para devolverlo, usa el botón <strong>Devolver</strong> en el detalle de la sesión.</p>
+    <form id="form-prestar">
+      <label>Sesión <select id="prestar-sesion" required></select></label>
+      <label>Alumno inscrito <select id="prestar-alumno" required></select></label>
+      <label>Pieza disponible <select id="prestar-material" required></select></label>
+      <button type="submit">Prestar</button>
+    </form>
+    <p id="mensaje-prestar" class="mensaje"></p>
+  </section>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
   <script src="app.js"></script>
 </body>
