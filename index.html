@@ -27,7 +27,7 @@
   <h2>Sesiones</h2>
   <table>
     <thead>
-      <tr><th>Fecha</th><th>Hora</th><th>Playa</th><th>Nivel</th><th>Duración</th></tr>
+      <tr><th>Fecha</th><th>Hora</th><th>Playa</th><th>Nivel</th><th>Duración</th><th id="col-plazas" hidden>Plazas libres</th></tr>
     </thead>
     <tbody id="lista"></tbody>
   </table>
@@ -73,6 +73,17 @@
     const SUPABASE_KEY = 'sb_publishable_ksICiDz4rmTde3bdbNZMeA_EvEI_Xz7';
     const cliente = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // Regla del grupo: cada monitor atiende como máximo a 5 alumnos
+    const ALUMNOS_POR_MONITOR = 5;
+    let hayUsuario = false;
+
+    // Plazas libres = 5 x monitores de la sesión - alumnos ya inscritos (nunca menos de 0)
+    function plazasLibres(sesion) {
+      const monitores = sesion.imparte[0].count;
+      const inscritos = sesion.inscripcion[0].count;
+      return Math.max(0, ALUMNOS_POR_MONITOR * monitores - inscritos);
+    }
+
     function mostrarMensaje(id, texto, esError) {
       const elemento = document.getElementById(id);
       elemento.textContent = texto;
@@ -81,9 +92,12 @@
 
     // PARTE 5: leer las sesiones y pintarlas en la tabla
     async function cargarSesiones() {
+      // Las tablas imparte e inscripcion solo las puede leer un usuario con sesión iniciada,
+      // así que las plazas solo se piden (y se enseñan) cuando hay sesión.
+      const columnas = hayUsuario ? '*, imparte(count), inscripcion(count)' : '*';
       const { data, error } = await cliente
         .from('sesion')
-        .select('*')
+        .select(columnas)
         .order('fecha')
         .order('hora_inicio');
 
@@ -105,6 +119,7 @@
           sesion.nivel ?? '-',
           sesion.duracion + ' min'
         ];
+        if (hayUsuario) celdas.push(plazasLibres(sesion));
         for (const texto of celdas) {
           const celda = document.createElement('td');
           celda.textContent = texto; // textContent evita que se cuele HTML en la página
@@ -129,10 +144,14 @@
 
     // Enseña u oculta el formulario según haya o no sesión iniciada
     function actualizarVista(sesionAuth) {
-      const hayUsuario = sesionAuth !== null;
+      const habiaUsuario = hayUsuario;
+      hayUsuario = sesionAuth !== null;
       document.getElementById('zona-login').hidden = hayUsuario;
       document.getElementById('zona-formulario').hidden = !hayUsuario;
+      document.getElementById('col-plazas').hidden = !hayUsuario;
       document.getElementById('usuario').textContent = hayUsuario ? sesionAuth.user.email : '';
+      // Al entrar o salir cambia lo que se puede ver, así que se recarga la lista
+      if (habiaUsuario !== hayUsuario) cargarSesiones();
     }
     cliente.auth.onAuthStateChange((_evento, sesionAuth) => actualizarVista(sesionAuth));
 
