@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sesiones de surf - Grupo 20</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1b2a35; }
+    h1 { margin-bottom: 0.2rem; }
+    table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #d5dde3; }
+    form { display: grid; gap: 0.6rem; max-width: 360px; }
+    label { display: grid; gap: 0.2rem; font-size: 0.9rem; }
+    input, select, button { font: inherit; padding: 0.4rem; }
+    button { cursor: pointer; }
+    .mensaje { min-height: 1.4rem; }
+    .error { color: #b00020; }
+    .ok { color: #1b7a3a; }
+    [hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Sesiones de surf</h1>
+  <p>Grupo 20: horarios, playas y niveles de las sesiones.</p>
+
+  <!-- PARTE 1: lista de sesiones (la puede ver cualquiera) -->
+  <h2>Sesiones</h2>
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th>Hora</th><th>Playa</th><th>Nivel</th><th>Duración</th></tr>
+    </thead>
+    <tbody id="lista"></tbody>
+  </table>
+  <p id="mensaje-lista" class="mensaje"></p>
+
+  <!-- PARTE 2: inicio de sesión (hace falta para añadir) -->
+  <section id="zona-login">
+    <h2>Iniciar sesión</h2>
+    <p>Para añadir sesiones hay que iniciar sesión con un usuario creado por el grupo.</p>
+    <form id="form-login">
+      <label>Correo <input type="email" id="correo" required autocomplete="username"></label>
+      <label>Contraseña <input type="password" id="clave" required autocomplete="current-password"></label>
+      <button type="submit">Entrar</button>
+    </form>
+    <p id="mensaje-login" class="mensaje"></p>
+  </section>
+
+  <!-- PARTE 3: formulario para añadir (solo con sesión iniciada) -->
+  <section id="zona-formulario" hidden>
+    <p>Sesión iniciada como <strong id="usuario"></strong>. <button id="btn-salir" type="button">Cerrar sesión</button></p>
+    <h2>Añadir una sesión</h2>
+    <form id="form-sesion">
+      <label>Fecha <input type="date" id="fecha" required></label>
+      <label>Hora de inicio <input type="time" id="hora" required></label>
+      <label>Playa <input type="text" id="playa" required></label>
+      <label>Nivel
+        <select id="nivel" required>
+          <option value="iniciacion">Iniciación</option>
+          <option value="medio">Medio</option>
+          <option value="avanzado">Avanzado</option>
+        </select>
+      </label>
+      <label>Duración (minutos) <input type="number" id="duracion" min="1" required></label>
+      <button type="submit">Añadir sesión</button>
+    </form>
+    <p id="mensaje-form" class="mensaje"></p>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+  <script>
+    // PARTE 4: conexión con Supabase (la publishable key es pública por diseño; la seguridad la da RLS)
+    const SUPABASE_URL = 'https://ecmkodlfmxmwlncxxoik.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ksICiDz4rmTde3bdbNZMeA_EvEI_Xz7';
+    const cliente = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    function mostrarMensaje(id, texto, esError) {
+      const elemento = document.getElementById(id);
+      elemento.textContent = texto;
+      elemento.className = 'mensaje ' + (esError ? 'error' : 'ok');
+    }
+
+    // PARTE 5: leer las sesiones y pintarlas en la tabla
+    async function cargarSesiones() {
+      const { data, error } = await cliente
+        .from('sesion')
+        .select('*')
+        .order('fecha')
+        .order('hora_inicio');
+
+      const lista = document.getElementById('lista');
+      lista.replaceChildren();
+
+      if (error) {
+        mostrarMensaje('mensaje-lista', 'No se pudieron cargar las sesiones: ' + error.message, true);
+        return;
+      }
+      mostrarMensaje('mensaje-lista', data.length === 0 ? 'Todavía no hay sesiones.' : '', false);
+
+      for (const sesion of data) {
+        const fila = document.createElement('tr');
+        const celdas = [
+          sesion.fecha,
+          sesion.hora_inicio.slice(0, 5),
+          sesion.playa,
+          sesion.nivel ?? '-',
+          sesion.duracion + ' min'
+        ];
+        for (const texto of celdas) {
+          const celda = document.createElement('td');
+          celda.textContent = texto; // textContent evita que se cuele HTML en la página
+          fila.appendChild(celda);
+        }
+        lista.appendChild(fila);
+      }
+    }
+
+    // PARTE 6: iniciar y cerrar sesión
+    document.getElementById('form-login').addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      const { error } = await cliente.auth.signInWithPassword({
+        email: document.getElementById('correo').value,
+        password: document.getElementById('clave').value
+      });
+      document.getElementById('clave').value = '';
+      mostrarMensaje('mensaje-login', error ? 'No se pudo iniciar sesión: ' + error.message : '', true);
+    });
+
+    document.getElementById('btn-salir').addEventListener('click', () => cliente.auth.signOut());
+
+    // Enseña u oculta el formulario según haya o no sesión iniciada
+    function actualizarVista(sesionAuth) {
+      const hayUsuario = sesionAuth !== null;
+      document.getElementById('zona-login').hidden = hayUsuario;
+      document.getElementById('zona-formulario').hidden = !hayUsuario;
+      document.getElementById('usuario').textContent = hayUsuario ? sesionAuth.user.email : '';
+    }
+    cliente.auth.onAuthStateChange((_evento, sesionAuth) => actualizarVista(sesionAuth));
+
+    // PARTE 7: añadir una sesión nueva
+    document.getElementById('form-sesion').addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      const { error } = await cliente.from('sesion').insert({
+        fecha: document.getElementById('fecha').value,
+        hora_inicio: document.getElementById('hora').value,
+        playa: document.getElementById('playa').value.trim(),
+        nivel: document.getElementById('nivel').value,
+        duracion: Number(document.getElementById('duracion').value)
+      });
+      if (error) {
+        mostrarMensaje('mensaje-form', 'No se pudo añadir: ' + error.message, true);
+        return;
+      }
+      mostrarMensaje('mensaje-form', 'Sesión añadida.', false);
+      evento.target.reset();
+      cargarSesiones();
+    });
+
+    cargarSesiones();
+  </script>
+</body>
+</html>
